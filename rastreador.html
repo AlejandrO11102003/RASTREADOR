@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rastreador GPS - Señor de los Milagros</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    .rastreo-btn {
+      transition: background-color 0.3s, transform 0.1s;
+    }
+    .rastreo-btn-active {
+      background-color: #10B981; /* Verde */
+    }
+    .rastreo-btn-inactive {
+      background-color: #6737BC; /* Morado */
+    }
+    .rastreo-btn:active {
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans p-4 flex flex-col items-center justify-center">
+
+  <div class="w-full max-w-md bg-white p-6 rounded-xl shadow-2xl text-center">
+    <h1 class="text-2xl font-bold text-gray-800 mb-4">
+      Rastreador GPS - Señor de los Milagros
+    </h1>
+    <p class="text-sm text-gray-500 mb-6">
+      Presione 'Iniciar Rastreo' para comenzar a enviar su ubicación.
+    </p>
+
+    <button id="tracker-button" onclick="toggleTrackerMode()" 
+      class="rastreo-btn rastreo-btn-inactive text-white font-bold py-3 px-6 rounded-lg shadow-lg w-full mb-6">
+      Iniciar Rastreo GPS
+    </button>
+
+    <div class="bg-gray-50 p-4 rounded-lg border-l-4 border-purple-500 text-left">
+      <p class="font-semibold text-gray-700">Estado de Envío:</p>
+      <p id="status-display" class="text-sm text-gray-600 mt-1">Listo para iniciar.</p>
+      <p id="coords-display" class="text-xs text-gray-500 mt-2 truncate">Última Lat/Lng: N/A</p>
+    </div>
+
+    <p id="user-id-display" class="text-xs text-gray-400 mt-4 truncate">ID de Dispositivo: Cargando...</p>
+  </div>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+
+    // ✅ Tu configuración real
+    const firebaseConfig = {
+      apiKey: "AIzaSyDZNkcEhEIb6ckjUcnSx6mj1pFd0pZy6l4",
+      authDomain: "iglesia-a4ee9.firebaseapp.com",
+      projectId: "iglesia-a4ee9",
+      storageBucket: "iglesia-a4ee9.firebasestorage.app", 
+      messagingSenderId: "844352643715",
+      appId: "1:844352643715:web:f0b3eb44ad2370eea4b1b6",
+      measurementId: "G-H08QX7K39Q"
+    };
+
+    let app, auth, db, userId, watchId;
+
+    async function initFirebase() {
+      try {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+
+        // ✅ Login anónimo
+        const userCredential = await signInAnonymously(auth);
+        userId = userCredential.user.uid;
+
+        document.getElementById('user-id-display').textContent =
+          `ID de Dispositivo: ${userId}`;
+        console.log("Firebase conectado ✅ UID:", userId);
+
+      } catch (error) {
+        console.error("Error de autenticación Firebase:", error);
+        document.getElementById('status-display').textContent =
+          "ERROR: Falló la autenticación.";
+      }
+    }
+
+    async function publishCurrentLocation(position) {
+      if (!db || !userId) return;
+
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+
+      const docRef = doc(db, "live_locations", userId);
+
+      try {
+        await setDoc(docRef, {
+          lat,
+          lng,
+          timestamp: new Date().toISOString(),
+          trackerId: userId
+        }, { merge: true });
+
+        document.getElementById('coords-display').textContent =
+          `Última Lat/Lng: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+      } catch (error) {
+        console.error("Error Firestore:", error);
+        document.getElementById('status-display').textContent = "ERROR al enviar ubicación.";
+      }
+    }
+
+    window.toggleTrackerMode = function() {
+      const button = document.getElementById('tracker-button');
+
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+
+        button.textContent = 'Iniciar Rastreo GPS';
+        button.classList.remove('rastreo-btn-active');
+        button.classList.add('rastreo-btn-inactive');
+        document.getElementById('status-display').textContent = 'Rastreo detenido.';
+        return;
+      }
+
+      if (!navigator.geolocation) {
+        document.getElementById('status-display').textContent = "ERROR: Su navegador no soporta Geolocation.";
+        return;
+      }
+
+      document.getElementById('status-display').textContent = 'Rastreo activo...';
+      button.textContent = 'Detener Rastreo';
+      button.classList.remove('rastreo-btn-inactive');
+      button.classList.add('rastreo-btn-active');
+
+      watchId = navigator.geolocation.watchPosition(
+        publishCurrentLocation,
+        (error) => {
+          console.error("Error GPS:", error);
+          document.getElementById('status-display').textContent = `ERROR GPS: ${error.message}`;
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    // ✅ Inicializar Firebase al cargar
+    initFirebase();
+  </script>
+</body>
+</html>
