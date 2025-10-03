@@ -33,7 +33,7 @@
       Presione 'Iniciar Rastreo' para comenzar a enviar su ubicación.
     </p>
 
-    <button id="tracker-button" onclick="toggleTrackerMode()" 
+    <button id="tracker-button" onclick="toggleTrackerMode()"
       class="rastreo-btn rastreo-btn-inactive text-white font-bold py-3 px-6 rounded-lg shadow-lg w-full mb-6">
       Iniciar Rastreo GPS
     </button>
@@ -53,7 +53,7 @@
     import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
     import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
-    // ✅ Tu configuración real
+    // ✅ Configuración Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyDZNkcEhEIb6ckjUcnSx6mj1pFd0pZy6l4",
       authDomain: "iglesia-a4ee9.firebaseapp.com",
@@ -92,6 +92,7 @@
 
       const lat = position.coords.latitude;
       const lng = position.coords.longitude;
+      const acc = position.coords.accuracy; // precisión en metros
 
       const docRef = doc(db, "live_locations", userId);
 
@@ -99,12 +100,13 @@
         await setDoc(docRef, {
           lat,
           lng,
+          accuracy: acc,
           timestamp: new Date().toISOString(),
           trackerId: userId
         }, { merge: true });
 
         document.getElementById('coords-display').textContent =
-          `Última Lat/Lng: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          `Última Lat/Lng: ${lat.toFixed(6)}, ${lng.toFixed(6)} (±${acc}m)`;
 
       } catch (error) {
         console.error("Error Firestore:", error);
@@ -136,13 +138,24 @@
       button.classList.remove('rastreo-btn-inactive');
       button.classList.add('rastreo-btn-active');
 
+      // 🚀 Enviar primera ubicación inmediata
+      navigator.geolocation.getCurrentPosition(
+        publishCurrentLocation,
+        (error) => {
+          console.error("Error GPS (primera ubicación):", error);
+          document.getElementById('status-display').textContent = `ERROR GPS inicial: ${error.message}`;
+        },
+        { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
+      );
+
+      // 🔄 Seguir enviando posiciones en tiempo real
       watchId = navigator.geolocation.watchPosition(
         publishCurrentLocation,
         (error) => {
           console.error("Error GPS:", error);
           document.getElementById('status-display').textContent = `ERROR GPS: ${error.message}`;
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
       );
     }
 
